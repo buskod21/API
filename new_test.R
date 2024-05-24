@@ -14,9 +14,10 @@ library(shinyjs)
 library(stringr)
 library(purrr)
 
-#install.packages("DataExplorer")
+#install.packages("ggstatsplot")
 library(DataExplorer)
 library(memoise)
+#library(ggstatsplot)
 
 # Source the functions
 source("app_function2.R")
@@ -231,6 +232,7 @@ ui <- dashboardPage(
                                                                     inputId = "button",
                                                                     label = NULL,
                                                                     choices = c("Histogram",
+                                                                                "Density plot",
                                                                                 "QQ plot",
                                                                                 "Boxplot",
                                                                                 "Scatter plot",
@@ -744,10 +746,45 @@ server <- function(input, output, session) {
       plot_histogram(plot_data,
                      ncol = ncol,
                      nrow = nrow,
-                     ggtheme = theme_classic())
+                     ggtheme = theme_classic(),
+                     theme_config = list(axis.ticks = element_blank(),
+                                         axis.line = element_line(colour = "grey50"),
+                                         panel.grid.minor = element_blank(),
+                                         panel.grid.major.x = element_blank(),
+                                         panel.grid.major.y = element_line(linetype = "dashed"),
+                                         panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                                         plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
     }
 
-    # b. QQ plot
+    # b. Density plot
+    if (plot_type == "Density plot") {
+      # Reshape the data to long format
+      long_data <- pivot_longer(plot_data,
+                                cols = where(is.numeric),
+                                names_to = "variable",
+                                values_to = "value")
+
+      # Create the density plot
+      density_plot <- ggplot(long_data, aes(x = value)) +
+        geom_density(fill = "blue", alpha = 0.5) +
+        facet_wrap(~ variable, scales = "free") +
+        labs(title = "Density Plot for Each Numeric Variable",
+             x = "Value",
+             y = "Density") +
+        theme_classic() +
+        theme(axis.ticks = element_blank(),
+              axis.line = element_line(colour = "grey50"),
+              panel.grid.minor = element_blank(),
+              panel.grid.major.x = element_blank(),
+              panel.grid.major.y = element_line(linetype = "dashed"),
+              panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+              plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
+
+      # Print the plot
+      print(density_plot)
+    }
+
+    # c. QQ plot
     if (plot_type == "QQ plot") {
 
       # Count numeric variables
@@ -762,21 +799,29 @@ server <- function(input, output, session) {
       plot_qq (plot_data,
                ncol = ncol,
                nrow = nrow,
-               ggtheme = theme_classic())
+               ggtheme = theme_classic(),
+               theme_config = list(axis.ticks = element_blank(),
+                                   axis.line = element_line(colour = "grey50"),
+                                   panel.grid.minor = element_blank(),
+                                   panel.grid.major.x = element_blank(),
+                                   panel.grid.major.y = element_line(linetype = "dashed"),
+                                   panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                                   plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
     }
 
-    # c. Boxplot
+    # d. Boxplot
     if (plot_type == "Boxplot") {
-      ggplot(plot_data, aes_string(x = x_var_clean,  y = y_var_clean, group = x_var_clean, color = x_var_clean)) +
+      boxplt <- ggplot(plot_data, aes_string(x = x_var_clean,  y = y_var_clean, group = x_var_clean, color = x_var_clean)) +
         geom_boxplot() +
         theme_classic()+
         theme(
           strip.text = element_text(face = "bold", size=12),
-          panel.grid.major = element_blank(),
-          panel.background = element_blank(),
-          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linetype = "dashed"),
+          panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+          plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
           plot.caption = element_text(hjust = 0, size=14),
-          axis.line = element_line(),
+          axis.line = element_line(colour = "grey50"),
           axis.text.x = element_text(vjust = 1.2,size = 12,color = "black"),
           axis.text.y = element_text(color = "black", size=12),
           axis.title.x = element_text(vjust = 0, size= 14),
@@ -784,17 +829,23 @@ server <- function(input, output, session) {
           legend.title = element_blank(),
           legend.position = "none",
           legend.text=element_text(size=rel(1.1)))
-    } else if (plot_type == "Scatter plot") {
+
+      print(boxplt)
+    }
+
+     # e. Scatter plot
+    if (plot_type == "Scatter plot") {
       ggplot(plot_data, aes_string(x = x_var_clean, y = y_var_clean, color = x_var_clean)) +
         geom_point() +
         theme_classic()+
         theme(
           strip.text = element_text(face = "bold", size=12),
-          panel.grid.major = element_blank(),
-          panel.background = element_blank(),
-          panel.grid.minor = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.grid.major.y = element_line(linetype = "dashed"),
+          panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+          plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
           plot.caption = element_text(hjust = 0, size=14),
-          axis.line = element_line(),
+          axis.line = element_line(colour = "grey50"),
           axis.text.x = element_text(vjust = 1.2,size = 12,color = "black"),
           axis.text.y = element_text(color = "black", size=12),
           axis.title.x = element_text(vjust = 0, size= 14),
@@ -802,6 +853,20 @@ server <- function(input, output, session) {
           legend.title = element_blank(),
           legend.position = "none",
           legend.text=element_text(size=rel(1.1)))
+    }
+
+    # f. Heat map
+    else if (plot_type == "Heat map") {
+      plot_correlation(na.omit(plot_data),
+                       maxcat = 5L,
+                       ggtheme = theme_classic(),
+                       theme_config = list(axis.ticks = element_blank(),
+                                           axis.line = element_line(colour = "grey50"),
+                                           panel.grid.minor = element_blank(),
+                                           panel.grid.major.x = element_blank(),
+                                           panel.grid.major.y = element_line(linetype = "dashed"),
+                                           panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                                           plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
     }
   })
 }
