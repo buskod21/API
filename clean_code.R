@@ -15,27 +15,13 @@ library(visNetwork)
 library(DataExplorer)
 library(memoise)
 
-## tell shiny to log all reactivity
-library(reactlog)
-#reactlog_enable()
-# shiny::reactlogShow()
-# shiny::reactlogReset()
 #install.packages("ggstatsplot")
 #library(ggstatsplot)
 
 # Source the functions
 source("app_function2.R")
 
-# path to memorized cache file using memoise package
-cache_dir <- cache_filesystem("./cache_folder")
-memorized_detailed_data <- memoise(fetch_study_details, cache = cache_dir)
-
-# Set global option for the shinyApp
-# Disk-based cache storing cached data in the './cache_folder' directory
-shinyOptions(cache = cachem::cache_disk("./cache_folder"))
-
-# get the basic data that is used to get detailed data
-basic_data <- fetch_all_studies()
+shinyOptions(cache = cachem::cache_disk("./cache_folder/cache/"))
 
 # UI Definition
 ui <- dashboardPage(
@@ -166,7 +152,7 @@ ui <- dashboardPage(
                                     bs4Dash::tabsetPanel(
                                       tabPanel("Data summary",
                                                box(
-                                                 title = "View data",
+                                                 title = "View raw data",
                                                  status = "white",
                                                  solidHeader = TRUE,
                                                  collapsible = TRUE,
@@ -218,33 +204,64 @@ ui <- dashboardPage(
                                                fluidRow(
                                                  column(3,
                                                         box(
-                                                          title = "Select Plot type",
+                                                          title = "Distribution",
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = FALSE,
                                                           elevation = 3,
                                                           width = 12,
                                                           awesomeRadio(
-                                                            inputId = "button",
+                                                            inputId = "button_1",
                                                             label = NULL,
                                                             choices = c("Histogram",
                                                                         "Density plot",
-                                                                        "QQ plot",
-                                                                        "Boxplot",
-                                                                        "Scatter plot",
-                                                                        "Heat map"),
+                                                                        "QQ plot"),
                                                             selected = "Histogram",
                                                             inline = FALSE
                                                           )
-                                                        ),
-                                                        # Box for selecting X and Y variables
+                                                        )
+                                                 ),
+                                                 column(9,
+                                                        # Box for displaying the plot area
                                                         box(
-                                                          title = "Select variables",
+                                                          title = "Plot Area",
+                                                          status = "white",
+                                                          solidHeader = TRUE,
+                                                          collapsible = FALSE,
+                                                          elevation = 3,
+                                                          width = NULL,
+                                                          withSpinner(plotOutput("plot_1"))
+                                                        )
+                                                 )
+                                               ),
+
+                                               # Break between box
+                                               br(),
+
+                                               # Box for selecting X and Y variables
+                                               fluidRow(
+                                                 column(3,
+                                                        box(
+                                                          title = "Inferential statistics",
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = FALSE,
                                                           elevation = 3,
                                                           width = 12,
+                                                          awesomeRadio(
+                                                            inputId = "button_2",
+                                                            label = NULL,
+                                                            choices = c("Boxplot",
+                                                                        "Scatter plot",
+                                                                        "Linear regression",
+                                                                        "Anova",
+                                                                        "Heat map"),
+                                                            selected = NULL,
+                                                            inline = FALSE),
+
+                                                          hr(),
+                                                          h5("Select variable"),
+
                                                           selectInput("Xvar",
                                                                       "X variable",
                                                                       choices = ""),
@@ -262,7 +279,7 @@ ui <- dashboardPage(
                                                           collapsible = FALSE,
                                                           elevation = 3,
                                                           width = NULL,
-                                                          withSpinner(plotOutput("plot"))
+                                                          withSpinner(plotOutput("plot_2"))
                                                         )
                                                  )
                                                )
@@ -285,32 +302,35 @@ ui <- dashboardPage(
 
 
 
-
-
-
-
 server <- function(input, output, session) {
 
-  #Reactive expression to get the memorized detailed data
-  detailed_data <- reactive ({
-    memorized_detailed_data(basic_data)
-  })
+  # get the basic data that is used to get detailed data
+  basic_data <- fetch_all_studies()
 
-  # Reactive expression to extract unique keywords
+  #Reactive expression to get detailed data
+  detailed_data <- reactive ({
+    fetch_study_details(basic_data)
+  }) %>%
+    bindCache(basic_data)
+
+
+  # Reactive expression to extract unique keywords from detailed data
   keywords <- reactive({
     req(detailed_data())
+
     data <- detailed_data()
+
     unique_keywords <- data %>%
-      pull(Keywords) %>%
-      str_split(",\\s*") %>%
-      unlist() %>%
-      unique() %>%
-      na.omit() %>%
-      sort()
+      pull(Keywords) %>% # Extract the 'Keywords' column
+      str_split(",\\s*") %>% # split keywords where there is a comma and ignore whitespaces
+      unlist() %>% # change keyword list into a single vector i.e., flatten the list
+      unique() %>% # # Get unique value
+      na.omit() %>% # Remove missing values
+      sort() # Sort the names alphabetically
     return(unique_keywords)
   })
 
-  # Reactive expression to extract unique authors
+  # Reactive expression to extract unique authors from detailed data
   authors <- reactive({
     req(detailed_data())
 
@@ -318,7 +338,8 @@ server <- function(input, output, session) {
 
     unique_authors <- data %>%
       pull(Authors) %>%  # Extract the 'Authors' column
-      str_split(", ") %>%  # Split each row into individual names
+      str_split(", ") %>%  # Split each row into individual names by comma
+      # apply this function (from purr package) to map each of the author names
       map(~{
         # Check if the length is even, if not, the last name is left unpaired
         if (length(.) %% 2 == 1) {
@@ -340,11 +361,13 @@ server <- function(input, output, session) {
 
   # Reactive expression to prepare nodes data based on selected event type
   nodes_data <- reactive({
-    req(input$event_type, detailed_data())
+    req(input$event_type)
 
     data <- detailed_data() %>%
+      # change date format
       mutate(PublicationDate = as.Date(PublicationDate, format="%Y-%m-%d"))
 
+    # Conditional statement to toggle between keywords and authors
     if (input$event_type == "Keywords") {
       events <- keywords()
       event_column <- "Keywords"
@@ -353,7 +376,10 @@ server <- function(input, output, session) {
       event_column <- "Authors"
     }
 
+    # Apply the function to each event in the events list and combine the results into a dataframe
     nodes <- map_df(events, function(event) {
+
+      # Filter the data to find papers matching the current event
       matched_papers <- data %>%
         filter(str_detect(.data[[event_column]], regex(paste0("\\b", event, "\\b"), ignore_case = TRUE)))
 
@@ -366,6 +392,7 @@ server <- function(input, output, session) {
         "No found studies"
       }
 
+      # Create a tibble (data frame) with the event information
       tibble(
         id = which(events == event),
         label = event,
@@ -376,11 +403,11 @@ server <- function(input, output, session) {
 
     return(nodes)
   }) %>%
-    bindCache(input$event_type) #Cache the output of this reactive based on the selected event type
+    bindCache(input$event_type, detailed_data()) #Cache the output of these reactives
 
   # Reactive expression to create edges data based on selected event type
   edges_data <- reactive({
-    req(input$event_type, detailed_data())
+    req(input$event_type)
 
     data <- detailed_data()
 
@@ -416,7 +443,7 @@ server <- function(input, output, session) {
 
     return(edges)
   }) %>%
-    bindCache(input$event_type) #Cache the output of this reactive based on the selected event type
+    bindCache(input$event_type, detailed_data()) #Cache the output of this reactive based on the selected event type
 
 
   # Render the network plot
@@ -462,7 +489,17 @@ server <- function(input, output, session) {
     updateSelectInput(session, "study_select", choices = unique(studies))
   })
 
-
+  # Observe changes in the tabPanel selection
+  observeEvent(input$mainbox, {
+    # Check if the 'Explore database' tabPanel is selected
+    if (input$mainbox == "Explore database") {
+      # Show the box
+      shinyjs::show("overviewBox")
+    } else {
+      # Hide the box if any other tabPanel is selected
+      shinyjs::hide("overviewBox")
+    }
+  })
 
   # Show study details based on selection
   output$study_details <- DT::renderDataTable({
@@ -471,13 +508,12 @@ server <- function(input, output, session) {
     data <- detailed_data()
 
     # Filter data first before transposing
-    filtered_data <- filter(data, Title == input$study_select)
-
-    # Transpose the filtered data
-    t_filtered_data <- t(filtered_data)
+    filtered_data <- data %>%
+      filter(Title == input$study_select) %>% # Filter data first before transposing
+      t() # Transpose the filtered data
 
     # Render the datatable
-    datatable(t_filtered_data,
+    datatable(filtered_data,
               options = list(dom = 'tp',
                              autoWidth = TRUE,
                              scrollX = TRUE),
@@ -486,12 +522,12 @@ server <- function(input, output, session) {
   })
 
 
-  # define the list of full-path to store the mapping
-  # between base names and full paths
+  # define the list of full-path to store the mapping between base names and full paths
   full_paths <- reactiveVal(list())
 
-  # This observeEvent should trigger once a study is selected either from network plot or directly from UI
+  # This observeEvent should trigger once a study is selected
   observeEvent(input$study_select, {
+
     # Ensure a selection has been made
     req(input$study_select, detailed_data())
 
@@ -518,17 +554,7 @@ server <- function(input, output, session) {
     updateSelectInput(session, "dataset_select", choices = basename(datafiles))
   })
 
-  # Observe changes in the tabPanel selection
-  observeEvent(input$mainbox, {
-    # Check if the 'Explore database' tabPanel is selected
-    if (input$mainbox == "Explore database") {
-      # Show the box
-      shinyjs::show("overviewBox")
-    } else {
-      # Hide the box if any other tabPanel is selected
-      shinyjs::hide("overviewBox")
-    }
-  })
+
 
   # Reactive expression for loading metadata
   loaded_metadata <- reactive({
@@ -537,8 +563,10 @@ server <- function(input, output, session) {
     # Use the full path for reading the file
     selected_file_path <- full_paths()[input$metadata_select]
 
-    # Read the file
-    raw_lines <- readLines(selected_file_path)
+    # Read the file and suppress warning
+    suppressWarnings({
+      raw_lines <- readLines(selected_file_path)
+    })
 
     # Replace only the first '=' with ':'
     corrected_lines <- sapply(raw_lines, function(line) {
@@ -615,43 +643,50 @@ server <- function(input, output, session) {
 
   # Reactive expression for loading data
   loaded_data <- reactive({
+
     req(input$dataset_select)  # Ensure a file is selected
 
     # Use the full path for reading the file
     selected_file_path_data <- full_paths()[input$dataset_select]
 
-    # Attempt to read the file, handle failure
-    tryCatch({
-      fread(selected_file_path_data, header = TRUE)
+    # Read the selected data using fread() function
+    data <- fread(selected_file_path_data, header = TRUE)
 
-    }, error = function(e) {
-      # Return NULL or handle the error appropriately
-      NULL
-    })
+    # Convert real numeric identified as character into numeric variable by
+    # applying the selective conversion
+    data <- data %>%
+      mutate(across(where(~ is.character(.) && !contains_letters(.)), as.numeric))%>%
+      suppressWarnings()
+
+    return(data)
   })
 
-  ## Output for the data analysis tabpanel ##
+
+  ## Output for the data analysis tabPanel ##
+
   # Logic to render the raw data table
   output$rawtable <- DT::renderDataTable({
-    # Use the reactive data
-    data_file <- loaded_data()
 
-    DT::datatable(data_file,
+    req(loaded_data())  # Ensure data is loaded
+
+    DT::datatable(loaded_data(),
                   rownames = FALSE,
                   options = list(dom = "tp",
                                  autoWidth = FALSE,
                                  scrollX = TRUE))
   })
 
-  #logic to render the data structure
+  # Logic to render the data structure
   output$structure <- renderDataTable({
-    data_file <- loaded_data()
-    data <-introduce(data_file)
+    req(loaded_data())  # Ensure data is loaded
 
-    data <- data %>%
-      tibble %>%
+    # Give the loaded_data() structure, convert to tibble and transpose
+    data <- loaded_data() %>%
+      introduce () %>%
+      tibble () %>%
       t()
 
+    # Data table output
     DT::datatable(data,
                   rownames = TRUE,
                   colnames = c("Key", "Value"),
@@ -662,22 +697,30 @@ server <- function(input, output, session) {
 
   # logic for the missing value
   output$missing_value <- renderPlot({
-    data_file <- loaded_data()
+    req(loaded_data())  # Ensure data is loaded
 
-    plot_missing(data_file)
+    plot_missing(loaded_data())
   })
 
   # logic for summary statistics
   output$summary <- renderDataTable({
-    data_file <- loaded_data()
+    req(loaded_data())  # Ensure data is loaded
 
-    # conditional statement to handle non-mumeric column
-    if(!is.data.frame(data_file)) stop("df needs to be a dataframe")
+    data_file <- loaded_data() # rename the loaded_data()
+
+    #Check if the input is a data frame
+    if(!is.data.frame(data_file)) stop("data needs to be a dataframe")
+
+    #Convert input to data frame if it's not already
     data_file <- as.data.frame(data_file)
+
+    # Filter out and subsets only logical and numeric columns
     data_file <- data_file[sapply(data_file, is.logical) | sapply(data_file, is.numeric)]
+
+    # Check if the filtered data frame is suitable
     if ((ncol(data_file) < 1) | (nrow(data_file) < 2)) stop("insuitable data frame (does it contain numerical data?)")
 
-    # compute the descriptive statistics
+    # Compute the descriptive statistics
     data <- cbind(apply(data_file,2,function(x) as.integer(sum(!is.na(x)))),
                   apply(data_file,2,mean, na.rm=TRUE),
                   apply(data_file,2,stats::sd, na.rm=TRUE),
@@ -685,7 +728,7 @@ server <- function(input, output, session) {
                     stats::quantile(x,
                                     probs=c(0, 0.25, 0.5, 0.75, 1), na.rm = TRUE))))
 
-    # round up the decimal place for each column
+    # Round up the decimal place for each column
     data <- round (data, digits = c(0, 3, 3, 3, 3, 3, 3, 3))
 
     # Assign column names
@@ -699,91 +742,49 @@ server <- function(input, output, session) {
                                  scrollX = TRUE))
   })
 
-  # Update selectInput for Xvar and Yvar based on selected data
-  observe({
-    data_file <- loaded_data()
-    req(data_file)
+  # Logic for data visualization tab
 
-    updateSelectInput(session,
-                      inputId = 'Xvar',
-                      label = 'X',
-                      choices = colnames(data_file))
+  # Description
+  output$plot_1 <- renderPlot({
+    req(loaded_data()) # Ensures data is loaded
 
-    # Update selectInput for Yvar based on selected data
-    observe({
-      data_file <- loaded_data()
-      req(data_file)  # Ensure plot_file is set
-
-      Ychoices <- subset(colnames(data_file), !(colnames(data_file) %in% input$Xvar))
-      updateSelectInput(session,
-                        inputId = 'Yvar',
-                        label = 'Y',
-                        choices = Ychoices)
-    })
-  })
+    # Reshape the data to long format
+    long_data <- pivot_longer(loaded_data(),
+                              cols = where(is.numeric),
+                              names_to = "variable",
+                              values_to = "value")
 
 
-  # Render the plot based on user input
-  output$plot <- renderPlot({
-    # Use the reactive data
-    data_file <- loaded_data()
-    req(data_file, input$Xvar, input$Yvar)  # Ensure these inputs are set
-
-    # Clean column names by keeping only letters and numbers
-    plot_data <- data_file
-    names(plot_data) <- gsub("[^A-Za-z0-9]", "", names(plot_data))
-
-    # Map original input variable names to cleaned names
-    x_var_clean <- names(plot_data)[names(data_file) == input$Xvar]
-    y_var_clean <- names(plot_data)[names(data_file) == input$Yvar]
-
-    req(x_var_clean, y_var_clean)  # Ensure variables are found
-
-
-    # Convert the selected X variable to a factor
-    plot_data <- plot_data
-    plot_data[[x_var_clean]] <- factor(plot_data[[x_var_clean]])
-
-    # Plotting logic with cleaned column names
-    plot_type <- input$button
+    plot_type <- input$button_1
 
     # a. Histogram
     if (plot_type == "Histogram") {
-      # Count numeric variables
-      num_vars <- sum(sapply(plot_data, is.numeric))
+      histogram_plot <- ggplot(long_data, aes(x = value)) +
+        geom_histogram(fill = "blue", alpha = 0.5, binwidth = 2) +
+        facet_wrap(~ variable, scales = "free") +
+        labs(title = "Histogram plot for each numeric variable",
+             x = "Value",
+             y = "Histogram")+
+        theme_classic() +
+        theme(axis.ticks = element_blank(),
+              axis.line = element_line(colour = "grey50"),
+              panel.grid.minor = element_blank(),
+              panel.grid.major.x = element_blank(),
+              panel.grid.major.y = element_line(linetype = "dashed"),
+              panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+              plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
 
-      # Calculate the number of columns and rows
-      # Simple square root strategy to determine layout
-      ncol <- ceiling(sqrt(num_vars))
-      nrow <- ceiling(num_vars / ncol)
-
-      # Plotting histograms with dynamic ncol and nrow
-      plot_histogram(plot_data,
-                     ncol = ncol,
-                     nrow = nrow,
-                     ggtheme = theme_classic(),
-                     theme_config = list(axis.ticks = element_blank(),
-                                         axis.line = element_line(colour = "grey50"),
-                                         panel.grid.minor = element_blank(),
-                                         panel.grid.major.x = element_blank(),
-                                         panel.grid.major.y = element_line(linetype = "dashed"),
-                                         panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-                                         plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
+      # Print the plot
+      print(histogram_plot)
     }
 
     # b. Density plot
     if (plot_type == "Density plot") {
-      # Reshape the data to long format
-      long_data <- pivot_longer(plot_data,
-                                cols = where(is.numeric),
-                                names_to = "variable",
-                                values_to = "value")
-
       # Create the density plot
       density_plot <- ggplot(long_data, aes(x = value)) +
         geom_density(fill = "blue", alpha = 0.5) +
         facet_wrap(~ variable, scales = "free") +
-        labs(title = "Density Plot for Each Numeric Variable",
+        labs(title = "Density plot for each numeric variable",
              x = "Value",
              y = "Density") +
         theme_classic() +
@@ -800,10 +801,10 @@ server <- function(input, output, session) {
     }
 
     # c. QQ plot
-    if (plot_type == "QQ plot") {
+    else if (plot_type == "QQ plot") {
 
       # Count numeric variables
-      num_vars <- sum(sapply(plot_data, is.numeric))
+      num_vars <- sum(sapply(loaded_data(), is.numeric))
 
       # Calculate the number of columns and rows
       # Simple square root strategy to determine layout
@@ -811,9 +812,10 @@ server <- function(input, output, session) {
       nrow <- ceiling(num_vars / ncol)
 
       # Plotting histograms with dynamic ncol and nrow
-      plot_qq (plot_data,
+      plot_qq (loaded_data(),
                ncol = ncol,
                nrow = nrow,
+               title = "QQ plot for each numeric variable",
                ggtheme = theme_classic(),
                theme_config = list(axis.ticks = element_blank(),
                                    axis.line = element_line(colour = "grey50"),
@@ -823,10 +825,61 @@ server <- function(input, output, session) {
                                    panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
                                    plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
     }
+  })
 
-    # d. Boxplot
+  # Logic to render inferential statistics
+  # Update selectInput for Xvar and Yvar based on selected data
+  observe({
+
+    req(loaded_data()) # Ensure data is loaded
+
+    updateSelectInput(session,
+                      inputId = 'Xvar',
+                      label = 'X',
+                      choices = colnames(loaded_data()))
+
+    # Update selectInput for Yvar based on selected data
+    observe({
+      Ychoices <- subset(colnames(loaded_data()),
+                         !(colnames(loaded_data()) %in% input$Xvar))
+      updateSelectInput(session,
+                        inputId = 'Yvar',
+                        label = 'Y',
+                        choices = Ychoices)
+    })
+  })
+
+
+  # Render the plot based on user input
+  output$plot_2 <- renderPlot({
+
+    req(loaded_data(), input$Xvar, input$Yvar) # Ensure these inputs are set
+
+
+    # Clean column names by keeping only letters and numbers
+    plot_data <- loaded_data()
+    names(plot_data) <- gsub("[^A-Za-z0-9]", "", names(plot_data))
+
+    # Map original input variable names to cleaned names
+    x_var_clean <- names(plot_data)[names(loaded_data()) == input$Xvar]
+    y_var_clean <- names(plot_data)[names(loaded_data()) == input$Yvar]
+
+    req(x_var_clean, y_var_clean)  # Ensure variables are found
+
+    # Convert the selected X variable to a factor
+    #plot_data <- plot_data
+    plot_data[[x_var_clean]] <- factor(plot_data[[x_var_clean]])
+
+    # Plotting logic with cleaned column names
+    plot_type <- input$button_2
+
+    # a.  Boxplot
     if (plot_type == "Boxplot") {
-      boxplt <- ggplot(plot_data, aes_string(x = x_var_clean,  y = y_var_clean, group = x_var_clean, color = x_var_clean)) +
+      boxplt <- ggplot(plot_data,
+                       aes_string(x = x_var_clean,
+                                  y = y_var_clean,
+                                  group = x_var_clean,
+                                  color = x_var_clean)) +
         geom_boxplot() +
         theme_classic()+
         theme(
@@ -848,7 +901,7 @@ server <- function(input, output, session) {
       print(boxplt)
     }
 
-    # e. Scatter plot
+    # b. Scatter plot
     if (plot_type == "Scatter plot") {
       ggplot(plot_data, aes_string(x = x_var_clean, y = y_var_clean, color = x_var_clean)) +
         geom_point() +
@@ -870,18 +923,22 @@ server <- function(input, output, session) {
           legend.text=element_text(size=rel(1.1)))
     }
 
-    # f. Heat map
+    # c. Heat map
     else if (plot_type == "Heat map") {
-      plot_correlation(na.omit(plot_data),
-                       maxcat = 5L,
-                       ggtheme = theme_classic(),
-                       theme_config = list(axis.ticks = element_blank(),
-                                           axis.line = element_line(colour = "grey50"),
-                                           panel.grid.minor = element_blank(),
-                                           panel.grid.major.x = element_blank(),
-                                           panel.grid.major.y = element_line(linetype = "dashed"),
-                                           panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-                                           plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
+      mtscaled <- as.matrix(scale(na.omit(loaded_data())))
+      heatmap(mtscaled,
+              col = topo.colors(200, alpha=0.5),
+              Colv=F, scale="none")
+      # plot_correlation(na.omit(plot_data),
+      #                  maxcat = 5L,
+      #                  ggtheme = theme_classic(),
+      #                  theme_config = list(axis.ticks = element_blank(),
+      #                                      axis.line = element_line(colour = "grey50"),
+      #                                      panel.grid.minor = element_blank(),
+      #                                      panel.grid.major.x = element_blank(),
+      #                                      panel.grid.major.y = element_line(linetype = "dashed"),
+      #                                      panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+      #                                      plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
     }
   })
 }
