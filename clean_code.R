@@ -13,14 +13,12 @@ library(stringr)
 library(purrr)
 library(visNetwork)
 library(DataExplorer)
-library(memoise)
-
-#install.packages("ggstatsplot")
-#library(ggstatsplot)
+library(heatmaply)
 
 # Source the functions
 source("app_function2.R")
 
+# Create a folder to store the cached information
 shinyOptions(cache = cachem::cache_disk("./cache_folder/cache/"))
 
 # UI Definition
@@ -129,7 +127,7 @@ ui <- dashboardPage(
                                     br(),
 
                                     # UI for the metadata
-                                    tags$b("Description of the Dataset"),
+                                    tags$b("Data description"),
                                     hr(),
                                     dataTableOutput("meta"),
 
@@ -176,7 +174,7 @@ ui <- dashboardPage(
                                                  ),
                                                  column(6,
                                                         box(
-                                                          title = "Missing value",
+                                                          title = "Missing values",
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = TRUE,
@@ -238,7 +236,7 @@ ui <- dashboardPage(
                                                # Break between box
                                                br(),
 
-                                               # Box for selecting X and Y variables
+                                               # Box for selecting inferential statistic, and X and Y variables
                                                fluidRow(
                                                  column(3,
                                                         box(
@@ -252,10 +250,8 @@ ui <- dashboardPage(
                                                             inputId = "button_2",
                                                             label = NULL,
                                                             choices = c("Boxplot",
-                                                                        "Scatter plot",
-                                                                        "Linear regression",
-                                                                        "Anova",
-                                                                        "Heat map"),
+                                                                        "Heat map",
+                                                                        "Linear regression"),
                                                             selected = NULL,
                                                             inline = FALSE),
 
@@ -699,7 +695,16 @@ server <- function(input, output, session) {
   output$missing_value <- renderPlot({
     req(loaded_data())  # Ensure data is loaded
 
-    plot_missing(loaded_data())
+    # Identify and plot missing values to select the best variables
+    plot_missing(loaded_data(),
+                 ggtheme = theme_classic(),
+                 theme_config = list(axis.ticks = element_blank(),
+                                     axis.line = element_line(colour = "grey50"),
+                                     panel.grid.minor = element_blank(),
+                                     panel.grid.major.x = element_blank(),
+                                     panel.grid.major.y = element_blank(),
+                                     panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                                     plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
   })
 
   # logic for summary statistics
@@ -734,7 +739,7 @@ server <- function(input, output, session) {
     # Assign column names
     colnames(data) <- c("N", "Mean", "Std. dev.", "Min.", "25 %", "Median", "75 %", "Max.")
 
-
+    # output data as a datatable
     DT::datatable(data,
                   rownames = TRUE,
                   options = list(dom = "tp",
@@ -770,7 +775,7 @@ server <- function(input, output, session) {
               axis.line = element_line(colour = "grey50"),
               panel.grid.minor = element_blank(),
               panel.grid.major.x = element_blank(),
-              panel.grid.major.y = element_line(linetype = "dashed"),
+              panel.grid.major.y = element_blank(),
               panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
               plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
 
@@ -792,7 +797,7 @@ server <- function(input, output, session) {
               axis.line = element_line(colour = "grey50"),
               panel.grid.minor = element_blank(),
               panel.grid.major.x = element_blank(),
-              panel.grid.major.y = element_line(linetype = "dashed"),
+              panel.grid.major.y = element_blank(),
               panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
               plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
 
@@ -828,9 +833,9 @@ server <- function(input, output, session) {
   })
 
   # Logic to render inferential statistics
+
   # Update selectInput for Xvar and Yvar based on selected data
   observe({
-
     req(loaded_data()) # Ensure data is loaded
 
     updateSelectInput(session,
@@ -850,85 +855,116 @@ server <- function(input, output, session) {
   })
 
 
-  # Render the plot based on user input
+  # Render the plot based on input plot type
   output$plot_2 <- renderPlot({
 
     req(loaded_data(), input$Xvar, input$Yvar) # Ensure these inputs are set
 
 
-    # Clean column names by keeping only letters and numbers
-    plot_data <- loaded_data()
-    names(plot_data) <- gsub("[^A-Za-z0-9]", "", names(plot_data))
+    # Clean column names by keeping only letters and numbers (some colnames have characters like %,*,#)
+    cleancol_data <- loaded_data()
+    names(cleancol_data) <- gsub("[^A-Za-z0-9]", "", names(cleancol_data))
 
     # Map original input variable names to cleaned names
-    x_var_clean <- names(plot_data)[names(loaded_data()) == input$Xvar]
-    y_var_clean <- names(plot_data)[names(loaded_data()) == input$Yvar]
+    x_var_clean <- names(cleancol_data)[names(loaded_data()) == input$Xvar]
+    y_var_clean <- names(cleancol_data)[names(loaded_data()) == input$Yvar]
 
     req(x_var_clean, y_var_clean)  # Ensure variables are found
-
-    # Convert the selected X variable to a factor
-    #plot_data <- plot_data
-    plot_data[[x_var_clean]] <- factor(plot_data[[x_var_clean]])
 
     # Plotting logic with cleaned column names
     plot_type <- input$button_2
 
     # a.  Boxplot
     if (plot_type == "Boxplot") {
-      boxplt <- ggplot(plot_data,
+
+      # Convert the selected X variable to a factor
+
+      cleancol_data[[x_var_clean]] <- factor(cleancol_data[[x_var_clean]])
+
+      boxplt <- ggplot(cleancol_data,
                        aes_string(x = x_var_clean,
                                   y = y_var_clean,
-                                  group = x_var_clean,
-                                  color = x_var_clean)) +
+                                  fill=x_var_clean)) +
         geom_boxplot() +
+        geom_point(size = 2) +
+        ggtitle("A boxplot showing individual datapoints") +
         theme_classic()+
         theme(
           strip.text = element_text(face = "bold", size=12),
           panel.grid.major.x = element_blank(),
-          panel.grid.major.y = element_line(linetype = "dashed"),
+          panel.grid.major.y = element_blank(),
           panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
           plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
           plot.caption = element_text(hjust = 0, size=14),
           axis.line = element_line(colour = "grey50"),
-          axis.text.x = element_text(vjust = 1.2,size = 12,color = "black"),
+          axis.text.x = element_text(vjust = 1.2,size = 12, color = "black"),
           axis.text.y = element_text(color = "black", size=12),
           axis.title.x = element_text(vjust = 0, size= 14),
           axis.title.y = element_text(size = 14),
           legend.title = element_blank(),
-          legend.position = "none",
-          legend.text=element_text(size=rel(1.1)))
+          legend.position = "none")
 
       print(boxplt)
     }
 
-    # b. Scatter plot
-    if (plot_type == "Scatter plot") {
-      ggplot(plot_data, aes_string(x = x_var_clean, y = y_var_clean, color = x_var_clean)) +
-        geom_point() +
-        theme_classic()+
-        theme(
-          strip.text = element_text(face = "bold", size=12),
-          panel.grid.major.x = element_blank(),
-          panel.grid.major.y = element_line(linetype = "dashed"),
-          panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-          plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-          plot.caption = element_text(hjust = 0, size=14),
-          axis.line = element_line(colour = "grey50"),
-          axis.text.x = element_text(vjust = 1.2,size = 12,color = "black"),
-          axis.text.y = element_text(color = "black", size=12),
-          axis.title.x = element_text(vjust = 0, size= 14),
-          axis.title.y = element_text(size = 14),
-          legend.title = element_blank(),
-          legend.position = "none",
-          legend.text=element_text(size=rel(1.1)))
+    # b. Heat Map
+    if (plot_type == "Heat map") {
+      scaled_data <- as.matrix(scale(na.omit(loaded_data())))
+        # heatmap(scaled_data,
+        #         col = topo.colors(200, alpha=0.5),
+        #         Colv=F,
+        #         scale = c("column"))
+    heatmaply(scaled_data,
+                dendrogram = "column",
+                xlab = "", ylab = "",
+                main = "",
+                scale = "column",
+                margins = c(60,100,40,20),
+                grid_color = "white",
+                grid_width = 0.00001,
+                titleX = FALSE,
+                hide_colorbar = TRUE,
+                branches_lwd = 0.1,
+                label_names = c("Variable name", "Feature", "Value"),
+                fontsize_row = 5, fontsize_col = 5,
+                labCol = colnames(scaled_data),
+                labRow = rownames(scaled_data),
+                heatmap_layers = theme(axis.line = element_blank())
+      )
     }
 
-    # c. Heat map
-    else if (plot_type == "Heat map") {
-      mtscaled <- as.matrix(scale(na.omit(loaded_data())))
-      heatmap(mtscaled,
-              col = topo.colors(200, alpha=0.5),
-              Colv=F, scale="none")
+    # c. Linear regression
+    else if (plot_type == "Linear regression") {
+      ggplot(cleancol_data, aes_string(x = x_var_clean,
+                                       y = y_var_clean)) +
+        geom_point(size=3.5)+
+        geom_smooth(method ="lm", color="blue", se=FALSE, formula = y ~ x) +
+        theme_classic() +
+        theme(
+          strip.text = element_text(face = "bold", size = 12),
+          panel.grid.major = element_blank(),
+          panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+          plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+          panel.grid.minor = element_blank(),
+          plot.caption = element_text(hjust = 0, size = 10),
+          axis.line = element_line(),
+          axis.text.x = element_text(size = 12,
+                                     color = "black"),
+          axis.text.y = element_text(color = "black", size = 12),
+          axis.title.x = element_text(vjust = 0, size = 16, face = "bold"),
+          axis.title.y = element_text(size = 16, face = "bold"),
+          legend.text = element_text(face= "bold", color = "black", size = 12),
+          legend.title = element_blank(),
+          panel.border = element_rect(colour = "black", fill = NA)
+        )
+    }
+
+    # # c. Heat map
+    # else if (plot_type == "Heat map") {
+    #   scaled_data <- as.matrix(scale(na.omit(loaded_data())))
+    #   heatmap(scaled_data,
+    #           col = topo.colors(200, alpha=0.5),
+    #           Colv=F, scale="none")
       # plot_correlation(na.omit(plot_data),
       #                  maxcat = 5L,
       #                  ggtheme = theme_classic(),
@@ -939,7 +975,7 @@ server <- function(input, output, session) {
       #                                      panel.grid.major.y = element_line(linetype = "dashed"),
       #                                      panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
       #                                      plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
-    }
+    # }
   })
 }
 
