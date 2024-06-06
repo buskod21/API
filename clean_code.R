@@ -202,80 +202,38 @@ ui <- dashboardPage(
                                                fluidRow(
                                                  column(3,
                                                         box(
-                                                          title = "Distribution",
+                                                          title = "Select analysis type",
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = FALSE,
                                                           elevation = 3,
                                                           width = 12,
                                                           awesomeRadio(
-                                                            inputId = "button_1",
+                                                            inputId = "analysis_type",
                                                             label = NULL,
                                                             choices = c("Histogram",
                                                                         "Density plot",
-                                                                        "QQ plot"),
+                                                                        "QQ plot",
+                                                                        "Heat map",
+                                                                        "Boxplot",
+                                                                        "Linear regression"),
                                                             selected = "Histogram",
                                                             inline = FALSE
-                                                          )
+                                                          ),
+                                                          uiOutput("variable_selection_x"),
+                                                          uiOutput("variable_selection_y")
                                                         )
                                                  ),
                                                  column(9,
                                                         # Box for displaying the plot area
                                                         box(
-                                                          title = "Plot Area",
+                                                          title = "Plot viewer",
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = FALSE,
                                                           elevation = 3,
                                                           width = NULL,
-                                                          withSpinner(plotOutput("plot_1"))
-                                                        )
-                                                 )
-                                               ),
-
-                                               # Break between box
-                                               br(),
-
-                                               # Box for selecting inferential statistic, and X and Y variables
-                                               fluidRow(
-                                                 column(3,
-                                                        box(
-                                                          title = "Inferential statistics",
-                                                          status = "white",
-                                                          solidHeader = TRUE,
-                                                          collapsible = FALSE,
-                                                          elevation = 3,
-                                                          width = 12,
-                                                          awesomeRadio(
-                                                            inputId = "button_2",
-                                                            label = NULL,
-                                                            choices = c("Boxplot",
-                                                                        "Heat map",
-                                                                        "Linear regression"),
-                                                            selected = NULL,
-                                                            inline = FALSE),
-
-                                                          hr(),
-                                                          h5("Select variable"),
-
-                                                          selectInput("Xvar",
-                                                                      "X variable",
-                                                                      choices = ""),
-                                                          selectInput("Yvar",
-                                                                      "Y variable",
-                                                                      choices ="")
-                                                        )
-                                                 ),
-                                                 column(9,
-                                                        # Box for displaying the plot area
-                                                        box(
-                                                          title = "Plot Area",
-                                                          status = "white",
-                                                          solidHeader = TRUE,
-                                                          collapsible = FALSE,
-                                                          elevation = 3,
-                                                          width = NULL,
-                                                          withSpinner(plotOutput("plot_2"))
+                                                          withSpinner(uiOutput("plot"))
                                                         )
                                                  )
                                                )
@@ -551,6 +509,7 @@ server <- function(input, output, session) {
   })
 
 
+  # ----- Metadata tabPanel -----
 
   # Reactive expression for loading metadata
   loaded_metadata <- reactive({
@@ -637,28 +596,43 @@ server <- function(input, output, session) {
                                  scrollX = TRUE))
   })
 
+  # ----- Exploratory data analysis tabPanel -----
+
   # Reactive expression for loading data
   loaded_data <- reactive({
-
     req(input$dataset_select)  # Ensure a file is selected
 
     # Use the full path for reading the file
     selected_file_path_data <- full_paths()[input$dataset_select]
 
-    # Read the selected data using fread() function
-    data <- fread(selected_file_path_data, header = TRUE)
+    # Attempt to read the file, handle failure
+    data <- tryCatch({
+      fread(selected_file_path_data, header = TRUE, quote = "\"")
+    }, error = function(e) {
+      # Return NULL or handle the error appropriately
+      NULL
+    })
 
-    # Convert real numeric identified as character into numeric variable by
-    # applying the selective conversion
-    data <- data %>%
-      mutate(across(where(~ is.character(.) && !contains_letters(.)), as.numeric))%>%
-      suppressWarnings()
+    if (!is.null(data)) {
+
+      # Convert real numeric variables identified as character into numeric variables
+      data <- suppressWarnings(
+        data %>%
+          mutate(across(where(~ is.character(.) && !contains_letters(.)), as.numeric))%>%
+          mutate(across(where(is.numeric), ~ ifelse(is.finite(.), ., NA))) %>%
+          drop_na()
+      )
+
+      # Clean column names by keeping only letters and numbers
+      # (e.g., some colnames have characters like %,*,#)
+      names(data) <- gsub("[^A-Za-z0-9]", "", names(data))
+    }
 
     return(data)
   })
 
 
-  ## Output for the data analysis tabPanel ##
+  # ------Logic for data description tabsetPanel ------
 
   # Logic to render the raw data table
   output$rawtable <- DT::renderDataTable({
@@ -747,235 +721,226 @@ server <- function(input, output, session) {
                                  scrollX = TRUE))
   })
 
-  # Logic for data visualization tab
 
-  # Description
-  output$plot_1 <- renderPlot({
-    req(loaded_data()) # Ensures data is loaded
+  # ------Logic for data visualization tabsetPanel ------
 
-    # Reshape the data to long format
-    long_data <- pivot_longer(loaded_data(),
-                              cols = where(is.numeric),
-                              names_to = "variable",
-                              values_to = "value")
+  # Dynamic UI for variable selection based on analysis type
 
+  observeEvent(input$analysis_type, {
 
-    plot_type <- input$button_1
+    analysis_type <- input$analysis_type
 
-    # a. Histogram
-    if (plot_type == "Histogram") {
-      histogram_plot <- ggplot(long_data, aes(x = value)) +
-        geom_histogram(fill = "blue", alpha = 0.5, binwidth = 2) +
-        facet_wrap(~ variable, scales = "free") +
-        labs(title = "Histogram plot for each numeric variable",
-             x = "Value",
-             y = "Histogram")+
-        theme_classic() +
-        theme(axis.ticks = element_blank(),
-              axis.line = element_line(colour = "grey50"),
-              panel.grid.minor = element_blank(),
-              panel.grid.major.x = element_blank(),
-              panel.grid.major.y = element_blank(),
-              panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-              plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
+    if (analysis_type %in% c("Boxplot", "Linear regression")) {
 
-      # Print the plot
-      print(histogram_plot)
-    }
+      output$variable_selection_x <- renderUI({
+        req(loaded_data())
+        var_choices <- colnames(loaded_data())
+        selectInput("variable_x", "Select X Variable", choices = var_choices)
+      })
 
-    # b. Density plot
-    if (plot_type == "Density plot") {
-      # Create the density plot
-      density_plot <- ggplot(long_data, aes(x = value)) +
-        geom_density(fill = "blue", alpha = 0.5) +
-        facet_wrap(~ variable, scales = "free") +
-        labs(title = "Density plot for each numeric variable",
-             x = "Value",
-             y = "Density") +
-        theme_classic() +
-        theme(axis.ticks = element_blank(),
-              axis.line = element_line(colour = "grey50"),
-              panel.grid.minor = element_blank(),
-              panel.grid.major.x = element_blank(),
-              panel.grid.major.y = element_blank(),
-              panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-              plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
-
-      # Print the plot
-      print(density_plot)
-    }
-
-    # c. QQ plot
-    else if (plot_type == "QQ plot") {
-
-      # Count numeric variables
-      num_vars <- sum(sapply(loaded_data(), is.numeric))
-
-      # Calculate the number of columns and rows
-      # Simple square root strategy to determine layout
-      ncol <- ceiling(sqrt(num_vars))
-      nrow <- ceiling(num_vars / ncol)
-
-      # Plotting histograms with dynamic ncol and nrow
-      plot_qq (loaded_data(),
-               ncol = ncol,
-               nrow = nrow,
-               title = "QQ plot for each numeric variable",
-               ggtheme = theme_classic(),
-               theme_config = list(axis.ticks = element_blank(),
-                                   axis.line = element_line(colour = "grey50"),
-                                   panel.grid.minor = element_blank(),
-                                   panel.grid.major.x = element_blank(),
-                                   panel.grid.major.y = element_line(linetype = "dashed"),
-                                   panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-                                   plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
+      output$variable_selection_y <- renderUI({
+        req(loaded_data(), input$variable_x)
+        y_choices <- setdiff(colnames(loaded_data()), input$variable_x)
+        selectInput("variable_y", "Select Y Variable", choices = y_choices)
+      })
+    } else {
+      output$variable_selection_x <- renderUI({ NULL })
+      output$variable_selection_y <- renderUI({ NULL })
     }
   })
 
-  # Logic to render inferential statistics
+  # Generate analysis output based on chosen analysis
+  output$plot <- renderUI({
 
-  # Update selectInput for Xvar and Yvar based on selected data
-  observe({
-    req(loaded_data()) # Ensure data is loaded
+    req(loaded_data()) # Ensure these inputs are set
 
-    updateSelectInput(session,
-                      inputId = 'Xvar',
-                      label = 'X',
-                      choices = colnames(loaded_data()))
+    analysis_type <- input$analysis_type
 
-    # Update selectInput for Yvar based on selected data
-    observe({
-      Ychoices <- subset(colnames(loaded_data()),
-                         !(colnames(loaded_data()) %in% input$Xvar))
-      updateSelectInput(session,
-                        inputId = 'Yvar',
-                        label = 'Y',
-                        choices = Ychoices)
-    })
+    if (analysis_type == "Heat map") {
+      plotlyOutput("heatmap_plot")
+    } else {
+      plotOutput("other_plots")
+    }
   })
 
+  # Logic to render other_plots
 
-  # Render the plot based on input plot type
-  output$plot_2 <- renderPlot({
+  output$other_plots <- renderPlot({
 
-    req(loaded_data(), input$Xvar, input$Yvar) # Ensure these inputs are set
+    # Ensure these variables are found
+    req(loaded_data())
 
+    analysis_type <- input$analysis_type
 
-    # Clean column names by keeping only letters and numbers (some colnames have characters like %,*,#)
-    cleancol_data <- loaded_data()
-    names(cleancol_data) <- gsub("[^A-Za-z0-9]", "", names(cleancol_data))
+    data <- loaded_data()
 
-    # Map original input variable names to cleaned names
-    x_var_clean <- names(cleancol_data)[names(loaded_data()) == input$Xvar]
-    y_var_clean <- names(cleancol_data)[names(loaded_data()) == input$Yvar]
+    # set variable names
 
-    req(x_var_clean, y_var_clean)  # Ensure variables are found
+    if (analysis_type %in% c("Boxplot", "Linear regression")) {
 
-    # Plotting logic with cleaned column names
-    plot_type <- input$button_2
+      req(input$variable_x, input$variable_y)
 
-    # a.  Boxplot
-    if (plot_type == "Boxplot") {
+      variable_x <- input$variable_x
+      variable_y <- input$variable_y
 
-      # Convert the selected X variable to a factor
+      # a. Boxplot
+      if (analysis_type == "Boxplot") {
+        data[[variable_x]] <- factor(data[[variable_x]])
+        if (length(levels(data[[variable_x]])) > 0) {
+          boxplt <- ggplot(data, aes_string(x = variable_x,
+                                            y = variable_y,
+                                            fill = variable_x)) +
+            geom_boxplot() +
+            geom_point(size = 2) +
+            ggtitle("A boxplot showing individual datapoints") +
+            theme_classic() +
+            theme(strip.text = element_text(face = "bold", size = 12),
+                  panel.grid.major.x = element_blank(),
+                  panel.grid.major.y = element_blank(),
+                  panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                  plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                  plot.caption = element_text(hjust = 0, size = 14),
+                  axis.line = element_line(colour = "grey50"),
+                  axis.text.x = element_text(vjust = 1.2, size = 12, color = "black"),
+                  axis.text.y = element_text(color = "black", size = 12),
+                  axis.title.x = element_text(vjust = 0, size = 14),
+                  axis.title.y = element_text(size = 14),
+                  legend.title = element_blank(),
+                  legend.position = "none")
+          print(boxplt)
+        } else {
+          warning("No levels in the factor variable for the fill aesthetic")
+        }
+      }
 
-      cleancol_data[[x_var_clean]] <- factor(cleancol_data[[x_var_clean]])
+      # b. Linear regression
+      if (analysis_type == "Linear regression") {
+        ggplot(data, aes_string(x = variable_x,
+                                y = variable_y)) +
+          geom_point(size = 3.5) +
+          ggtitle("Relationship between two continous variables") +
+          geom_smooth(method = "lm", color = "blue", se = FALSE, formula = y ~ x) +
+          theme_classic() +
+          theme(strip.text = element_text(face = "bold", size = 12),
+                panel.grid.major = element_blank(),
+                panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                panel.grid.minor = element_blank(),
+                plot.caption = element_text(hjust = 0, size = 10),
+                axis.line = element_line(),
+                axis.text.x = element_text(size = 12, color = "black"),
+                axis.text.y = element_text(color = "black", size = 12),
+                axis.title.x = element_text(vjust = 0, size = 16, face = "bold"),
+                axis.title.y = element_text(size = 16, face = "bold"),
+                legend.text = element_text(face = "bold", color = "black", size = 12))
+      }
 
-      boxplt <- ggplot(cleancol_data,
-                       aes_string(x = x_var_clean,
-                                  y = y_var_clean,
-                                  fill=x_var_clean)) +
-        geom_boxplot() +
-        geom_point(size = 2) +
-        ggtitle("A boxplot showing individual datapoints") +
-        theme_classic()+
-        theme(
-          strip.text = element_text(face = "bold", size=12),
-          panel.grid.major.x = element_blank(),
-          panel.grid.major.y = element_blank(),
-          panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-          plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-          plot.caption = element_text(hjust = 0, size=14),
-          axis.line = element_line(colour = "grey50"),
-          axis.text.x = element_text(vjust = 1.2,size = 12, color = "black"),
-          axis.text.y = element_text(color = "black", size=12),
-          axis.title.x = element_text(vjust = 0, size= 14),
-          axis.title.y = element_text(size = 14),
-          legend.title = element_blank(),
-          legend.position = "none")
+    } else {
+      # For other plot types that don't need variable selection
+      # c. Histogram
+      if (analysis_type == "Histogram") {
+        long_data <- pivot_longer(data, cols = where(is.numeric),
+                                  names_to = "variable",
+                                  values_to = "value")
+        histogram_plot <- ggplot(long_data, aes(x = value)) +
+          geom_histogram(fill = "blue", alpha = 0.5, binwidth = 2) +
+          facet_wrap(~ variable, scales = "free") +
+          labs(title = "Histogram plot for each numeric variable",
+               x = "Value",
+               y = "Histogram") +
+          theme_classic() +
+          theme(axis.ticks = element_blank(),
+                axis.line = element_line(colour = "grey50"),
+                panel.grid.minor = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_blank(),
+                panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
+        print(histogram_plot)
+      }
 
-      print(boxplt)
+      # d. Density plot
+      if (analysis_type == "Density plot") {
+        long_data <- pivot_longer(data, cols = where(is.numeric),
+                                  names_to = "variable",
+                                  values_to = "value")
+        density_plot <- ggplot(long_data, aes(x = value)) +
+          geom_density(fill = "blue", alpha = 0.5) +
+          facet_wrap(~ variable, scales = "free") +
+          labs(title = "Density plot for each numeric variable",
+               x = "Value",
+               y = "Density") +
+          theme_classic() +
+          theme(axis.ticks = element_blank(),
+                axis.line = element_line(colour = "grey50"),
+                panel.grid.minor = element_blank(),
+                panel.grid.major.x = element_blank(),
+                panel.grid.major.y = element_blank(),
+                panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
+                plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"))
+
+        print(density_plot)
+      }
+
+      # e. QQ plot
+      if (analysis_type == "QQ plot") {
+        num_vars <- sum(sapply(loaded_data(), is.numeric))
+        ncol <- ceiling(sqrt(num_vars))
+        nrow <- ceiling(num_vars / ncol)
+        plot_qq(loaded_data(), ncol = ncol, nrow = nrow,
+                title = "QQ plot for each numeric variable",
+                ggtheme = theme_classic(),
+                theme_config = list(axis.ticks = element_blank(),
+                                    axis.line = element_line(colour = "grey50"),
+                                    panel.grid.minor = element_blank(),
+                                    panel.grid.major.x = element_blank(),
+                                    panel.grid.major.y = element_blank(),
+                                    panel.background = element_rect(fill = "#fbf9f4",
+                                                                    color = "#fbf9f4"),
+                                    plot.background = element_rect(fill = "#fbf9f4",
+                                                                   color = "#fbf9f4")))
+      }
     }
+  })
 
-    # b. Heat Map
-    if (plot_type == "Heat map") {
-      scaled_data <- as.matrix(scale(na.omit(loaded_data())))
-        # heatmap(scaled_data,
-        #         col = topo.colors(200, alpha=0.5),
-        #         Colv=F,
-        #         scale = c("column"))
-    heatmaply(scaled_data,
-                dendrogram = "column",
-                xlab = "", ylab = "",
-                main = "",
-                scale = "column",
-                margins = c(60,100,40,20),
-                grid_color = "white",
-                grid_width = 0.00001,
-                titleX = FALSE,
-                hide_colorbar = TRUE,
-                branches_lwd = 0.1,
-                label_names = c("Variable name", "Feature", "Value"),
-                fontsize_row = 5, fontsize_col = 5,
-                labCol = colnames(scaled_data),
-                labRow = rownames(scaled_data),
-                heatmap_layers = theme(axis.line = element_blank())
+  # output for the heatmap
+  output$heatmap_plot <- renderPlotly({
+
+    req(loaded_data(),
+        input$analysis_type == "Heat map") # Ensure data is loaded and non-null
+
+    # Remove non-numeric columns and NA rows
+    numeric_data <- loaded_data() %>%
+      select(where(is.numeric)) %>%
+      na.omit()
+
+    heatmap<- heatmaply(cor(numeric_data),
+                        k_col = 2,
+                        k_row = 2,
+                        main = " Heatmap showing relationship among the variables",
+                        plot_method = "plotly")
+
+    # Customize the heatmap theme
+    heatmap <- heatmap %>%
+      layout(
+        xaxis = list(
+          ticks = "",
+          showline = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE
+        ),
+        yaxis = list(
+          ticks = "",
+          showline = FALSE,
+          showgrid = FALSE,
+          zeroline = FALSE
+        ),
+        paper_bgcolor = "#fbf9f4",
+        plot_bgcolor = "#fbf9f4"
       )
-    }
 
-    # c. Linear regression
-    else if (plot_type == "Linear regression") {
-      ggplot(cleancol_data, aes_string(x = x_var_clean,
-                                       y = y_var_clean)) +
-        geom_point(size=3.5)+
-        geom_smooth(method ="lm", color="blue", se=FALSE, formula = y ~ x) +
-        theme_classic() +
-        theme(
-          strip.text = element_text(face = "bold", size = 12),
-          panel.grid.major = element_blank(),
-          panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-          plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-          panel.grid.minor = element_blank(),
-          plot.caption = element_text(hjust = 0, size = 10),
-          axis.line = element_line(),
-          axis.text.x = element_text(size = 12,
-                                     color = "black"),
-          axis.text.y = element_text(color = "black", size = 12),
-          axis.title.x = element_text(vjust = 0, size = 16, face = "bold"),
-          axis.title.y = element_text(size = 16, face = "bold"),
-          legend.text = element_text(face= "bold", color = "black", size = 12),
-          legend.title = element_blank(),
-          panel.border = element_rect(colour = "black", fill = NA)
-        )
-    }
 
-    # # c. Heat map
-    # else if (plot_type == "Heat map") {
-    #   scaled_data <- as.matrix(scale(na.omit(loaded_data())))
-    #   heatmap(scaled_data,
-    #           col = topo.colors(200, alpha=0.5),
-    #           Colv=F, scale="none")
-      # plot_correlation(na.omit(plot_data),
-      #                  maxcat = 5L,
-      #                  ggtheme = theme_classic(),
-      #                  theme_config = list(axis.ticks = element_blank(),
-      #                                      axis.line = element_line(colour = "grey50"),
-      #                                      panel.grid.minor = element_blank(),
-      #                                      panel.grid.major.x = element_blank(),
-      #                                      panel.grid.major.y = element_line(linetype = "dashed"),
-      #                                      panel.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4"),
-      #                                      plot.background = element_rect(fill = "#fbf9f4", color = "#fbf9f4")))
-    # }
+    return(heatmap)
   })
 }
 
