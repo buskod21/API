@@ -39,6 +39,10 @@ ui <- dashboardPage(
     status = "lightblue",
     elevation = 4,
     sidebarMenu(
+      menuItem("Home",
+               icon = icon("house"),
+               tabName = "home"),
+
       menuItem("Explore borealis",
                icon = icon("server"),
                tabName = "Borealisdata")
@@ -47,6 +51,38 @@ ui <- dashboardPage(
 
   dashboardBody(
     tabItems(
+      tabItem(
+        tabName = "home",  # Content for the "home" tab ----
+        h5(strong("Welcome to the reusable data explorer App.")),  # Subheading
+
+        br(),
+
+        p("This shiny web application was developed as a part of the Reusable
+        research data made shiny workshop that was
+        held at the University of Guelph, Guelph Ontario Canada.",
+          "You can find more information about the workshop and access the workshop materials",
+          tags$a(href = "https://github.com/agrifooddatacanada/RRDMS_Workshop",
+                 "here.", target = "_blank")),  # Create a hyperlink
+
+        h5(strong("About the App")),
+
+        p("The ",
+          strong("Explore borealis tab"),
+          "allows you to view how keywords and authors are connected by clicking
+          the network view tab"," the metadata and data schema can be viwed by
+          clicking the data description tab", " and finally the data can be explored
+          data gotten from the Borealis database. Click ",
+          tags$a(href = "https://borealisdata.ca/dataverse/oacHist",
+                 "here",
+                 target = "_blank"),
+          " to access the oac repository in the Borealis database."),
+        br(),
+        img(src = 'workshop1.jpeg', height = 400, width = 700),
+        br(),
+        p(h4(strong("Have fun exploring re-usable data!"))
+        )
+      ),
+
       tabItem(
         tabName = "Borealisdata",
         tabBox(id="mainbox",
