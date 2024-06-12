@@ -39,9 +39,9 @@ basic_data <- fetch_all_studies()
 
 # UI Definition
 ui <- dashboardPage(
-  skin = "lightblue",
-  fullscreen = TRUE,
+  skin = "blue",
   scrollToTop = TRUE,
+
   dashboardHeader(
     title = "Menu",
     status = "white",

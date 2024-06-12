@@ -15,70 +15,73 @@ library(visNetwork)
 library(DataExplorer)
 library(heatmaply)
 
+
+
 # Source the functions
 source("app_function2.R")
+
 
 # Create a folder to store the cached information
 shinyOptions(cache = cachem::cache_disk("./cache_folder/cache/"))
 
 # UI Definition
 ui <- dashboardPage(
-  skin = "lightblue",
-  fullscreen = TRUE,
+  skin = "light",
   scrollToTop = TRUE,
+  fullscreen = TRUE,
+
+  # Dashboard header
   dashboardHeader(
-    title = "Menu",
-    status = "white",
-    h3("Explore borealis")
-  ),
-
-  dashboardSidebar(
-    collapsed = FALSE,
-    minified = FALSE,
-    skin = "dark",
+    title = tags$h3(tags$b("Menu:")),
+    skin = "light",
     status = "lightblue",
-    elevation = 4,
-    sidebarMenu(
-      menuItem("Home",
-               icon = icon("house"),
-               tabName = "home"),
-
-      menuItem("Explore borealis",
-               icon = icon("server"),
-               tabName = "Borealisdata")
+    navbarMenu(
+    navbarTab(tags$b("Home"),
+             #icon = icon("house"),
+             tabName = "home"),
+    navbarTab(tags$b("Explore borealis"),
+             #icon = icon("server"),
+             tabName = "Borealisdata")
     )
   ),
 
+  # Disable dashboard sidebar
+  dashboardSidebar(disable = TRUE),
+
+  # Dashboard body
   dashboardBody(
     tabItems(
       tabItem(
         tabName = "home",  # Content for the "home" tab ----
-        h5(strong("Welcome to the reusable data explorer App.")),  # Subheading
-
-        br(),
+        h3(strong("Welcome to the reusable data explorer App.")),  # Subheading
 
         p("This shiny web application was developed as a part of the Reusable
-        research data made shiny workshop that was
-        held at the University of Guelph, Guelph Ontario Canada.",
-          "You can find more information about the workshop and access the workshop materials",
+        research data made shiny workshop that was held at the University of Guelph,
+        Guelph Ontario Canada.","You can find more information about the workshop
+        and access the workshop materials",
           tags$a(href = "https://github.com/agrifooddatacanada/RRDMS_Workshop",
                  "here.", target = "_blank")),  # Create a hyperlink
 
-        h5(strong("About the App")),
+        h4(strong("About the App")),
 
         p("The ",
           strong("Explore borealis tab"),
-          "allows you to view how keywords and authors are connected by clicking
-          the network view tab"," the metadata and data schema can be viwed by
-          clicking the data description tab", " and finally the data can be explored
-          data gotten from the Borealis database. Click ",
+          "allows you to view the networks of studies in the OAC historical reproducible
+          project repository on borealis based on keywords and author's name.", "Users can
+          then select a particular keyword or author to futher explore the associated studies.",
+          "The study overview, metadata and explore data tab allows users to gain a deeper insight
+          about the study and data. Click ",
           tags$a(href = "https://borealisdata.ca/dataverse/oacHist",
                  "here",
                  target = "_blank"),
-          " to access the oac repository in the Borealis database."),
+          " to access the oac historical reproducible project repository in the Borealis database."),
+
         br(),
+
         img(src = 'workshop1.jpeg', height = 400, width = 700),
+
         br(),
+
         p(h4(strong("Have fun exploring re-usable data!"))
         )
       ),
@@ -90,7 +93,7 @@ ui <- dashboardPage(
                width = 12,
                collapsible = TRUE,
                maximizable = TRUE,
-               elevation = 4,
+               elevation = 1,
                solidHeader = TRUE,
                status = "lightblue",
                side = "right",
@@ -107,7 +110,14 @@ ui <- dashboardPage(
                                  ), hr(),
                                  withSpinner(visNetworkOutput("networkPlot",
                                                               width="100%",
-                                                              height = "800px"))
+                                                              height = "800px")
+                                             ),
+                                 absolutePanel(id = "infoPanel",
+                                               fixed = TRUE,
+                                               draggable = TRUE,
+                                               top = 360, right = 60, width = 300,
+                                               height = "auto",
+                                               uiOutput("nodeInfo"))# uioutput for displaying node-related information
                           )
                         )
                ),
@@ -137,7 +147,7 @@ ui <- dashboardPage(
                   width = 12,
                   collapsible = TRUE,
                   maximizable = TRUE,
-                  elevation = 4,
+                  elevation = 1,
                   solidHeader = TRUE,
                   status = "lightblue",
                   side = "right",
@@ -185,16 +195,20 @@ ui <- dashboardPage(
 
                                     bs4Dash::tabsetPanel(
                                       tabPanel("Data summary",
+
+                                               br(),
+
                                                box(
                                                  title = "View raw data",
                                                  status = "white",
                                                  solidHeader = TRUE,
                                                  collapsible = TRUE,
-                                                 elevation = 3,
+                                                 elevation = 1,
                                                  width = 12,
                                                  collapsed = F,
                                                  DT::dataTableOutput("rawtable")
                                                ),
+
                                                fluidRow(
                                                  column(6,
                                                         box(
@@ -202,7 +216,7 @@ ui <- dashboardPage(
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = TRUE,
-                                                          elevation = 3,
+                                                          elevation = 1,
                                                           width = 12,
                                                           collapsed = F,
                                                           DT::dataTableOutput("structure")
@@ -214,7 +228,7 @@ ui <- dashboardPage(
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = TRUE,
-                                                          elevation = 3,
+                                                          elevation = 1,
                                                           width = 12,
                                                           collapsed = F,
                                                           plotOutput("missing_value")
@@ -227,7 +241,7 @@ ui <- dashboardPage(
                                                  status = "white",
                                                  solidHeader = TRUE,
                                                  collapsible = TRUE,
-                                                 elevation = 3,
+                                                 elevation = 1,
                                                  width = 12,
                                                  collapsed = F,
                                                  DT::dataTableOutput("summary")
@@ -235,6 +249,9 @@ ui <- dashboardPage(
                                       ),
 
                                       tabPanel("Data visualization",
+
+                                               br(),
+
                                                fluidRow(
                                                  column(3,
                                                         box(
@@ -242,7 +259,7 @@ ui <- dashboardPage(
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = FALSE,
-                                                          elevation = 3,
+                                                          elevation = 1,
                                                           width = 12,
                                                           awesomeRadio(
                                                             inputId = "analysis_type",
@@ -267,7 +284,7 @@ ui <- dashboardPage(
                                                           status = "white",
                                                           solidHeader = TRUE,
                                                           collapsible = FALSE,
-                                                          elevation = 3,
+                                                          elevation = 1,
                                                           width = NULL,
                                                           withSpinner(uiOutput("plot"))
                                                         )
@@ -275,7 +292,7 @@ ui <- dashboardPage(
                                                )
                                       ),
                                       type = "pills",
-                                      vertical = TRUE
+                                      vertical = FALSE
                                     )
                              )
                            )
@@ -301,11 +318,17 @@ server <- function(input, output, session) {
   detailed_data <- reactive ({
     fetch_study_details(basic_data)
   }) %>%
-    bindCache(basic_data)
+    bindCache(basic_data) # detailed data is cached
 
+  # View all studies if not filtered by the network
+  observe({
+    data <- detailed_data()
+    updateSelectInput(session, "study_select", choices = unique(data$Title))
+  })
 
   # Reactive expression to extract unique keywords from detailed data
   keywords <- reactive({
+
     req(detailed_data())
 
     data <- detailed_data()
@@ -448,7 +471,7 @@ server <- function(input, output, session) {
                                        main = "Select by ID",
                                        style = 'width: 300px; height: 26px;')) %>%
       visLayout(randomSeed = 123) %>%  # Consistent layout
-      visInteraction(hover = TRUE,
+      visInteraction(hover = FALSE,
                      navigationButtons = TRUE,
                      keyboard = TRUE,
                      tooltipDelay = 0) %>%
@@ -461,23 +484,77 @@ server <- function(input, output, session) {
 
   # When an event is selected in the network, update the study select input
   observeEvent(input$selectedEvent, {
-
     req(input$event_type, detailed_data())
 
-    data <- detailed_data()
+    data <- detailed_data()  # Ensure data is loaded
+    collaborators <- NA  # Initialize collaborators
 
-    if (input$event_type == "Keywords") {
-      event <- keywords()[input$selectedEvent]
-      event_column <- "Keywords"
+    if (!is.null(input$selectedEvent) && !is.na(input$selectedEvent)) {
+      # Dynamically select the event type and corresponding column
+      if (input$event_type == "Keywords") {
+        event <- keywords()[input$selectedEvent]
+        event_column <- "Keywords"
+      } else {  # Assume Authors
+        event <- authors()[input$selectedEvent]
+        event_column <- "Authors"
+      }
+
+      # Apply filtering based on the selected node
+      filtered_data <- data %>%
+        filter(str_detect(.data[[event_column]], regex(paste0("\\b", event, "\\b"), ignore_case = TRUE)))
+
+      # Calculate collaborators only if 'Authors' is selected
+      if (input$event_type == "Authors") {
+        collaborators <- filtered_data %>%
+          pull(Authors) %>%
+          str_split(",") %>%
+          unlist() %>%
+          str_trim() %>%
+          unique() %>%
+          setdiff(event) %>%
+          length()
+      }
+
+      # Retrieve studies and DOIs from filtered data
+      studies <- filtered_data %>% pull(Title)
+      dois <- filtered_data %>% pull(Persistent_id) %>% unique()
+
+      # Generate appropriate text for DOIs
+      if (length(dois) == 0) {
+        doi_text <- "No DOI found."
+      } else if (length(dois) > 1) {
+        doi_links <- sapply(dois, function(doi) {
+          paste0('<a class="badge badge-info" href="https://doi.org/', doi, '" target="_blank">', doi, '</a>')
+        })
+        doi_text <- paste(paste(doi_links, collapse = ", "))
+      } else {
+        doi_links <- paste0('<a class="badge badge-info" href="https://doi.org/', dois, '" target="_blank">', dois, '</a>')
+        doi_text <- paste(doi_links)
+      }
+
+      # Prepare the output information with HTML
+      info_html <- tags$div(
+        tags$p(tags$b("Number of studies: "), length(unique(studies))),
+        tags$p(tags$b("Number of collaborators: "), ifelse(is.na(collaborators), "N/A", collaborators)),
+        tags$p(tags$b("DOIs of studies: "), HTML(doi_text))  # Ensure HTML is properly rendered
+      )
+
+      # Update the UI output for HTML content
+      output$nodeInfo <- renderUI({
+        info_html
+      })
     } else {
-      event <- authors()[input$selectedEvent]
-      event_column <- "Authors"
+      # Handle no selection
+      output$nodeInfo <- renderUI({
+        tags$div(class = "alert alert-warning", "No node selected.")
+      })
     }
-    studies <- data %>%
-      filter(str_detect(.data[[event_column]], regex(paste0("\\b", event, "\\b"), ignore_case = TRUE))) %>%
-      pull(Title)
+
+    # Update the study select input with the relevant studies
     updateSelectInput(session, "study_select", choices = unique(studies))
   })
+
+
 
   # Observe changes in the tabPanel selection
   observeEvent(input$mainbox, {
@@ -793,9 +870,11 @@ server <- function(input, output, session) {
     analysis_type <- input$analysis_type
 
     if (analysis_type == "Heat map") {
-      plotlyOutput("heatmap_plot")
+      plotlyOutput("heatmap_plot",
+                   height = "auto")
     } else {
-      plotOutput("other_plots")
+      plotOutput("other_plots",
+                 height = "600px")
     }
   })
 
