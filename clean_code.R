@@ -29,19 +29,23 @@ ui <- dashboardPage(
   skin = "light",
   scrollToTop = TRUE,
   fullscreen = TRUE,
+  help = NULL,
+  dark = NULL,
 
   # Dashboard header
   dashboardHeader(
-    title = tags$h3(tags$b("Menu:")),
     skin = "light",
     status = "lightblue",
     navbarMenu(
-    navbarTab(tags$b("Home"),
-             #icon = icon("house"),
-             tabName = "home"),
-    navbarTab(tags$b("Explore borealis"),
-             #icon = icon("server"),
-             tabName = "Borealisdata")
+      navbarTab(tags$b("Home"),
+                #icon = icon("house"),
+                tabName = "home"),
+      navbarTab(tags$b("About"),
+                #icon = icon("house"),
+                tabName = "About_tab"),
+      navbarTab(tags$b("Explore borealis"),
+                #icon = icon("server"),
+                tabName = "Borealisdata")
     )
   ),
 
@@ -50,19 +54,21 @@ ui <- dashboardPage(
 
   # Dashboard body
   dashboardBody(
+    tags$head(tags$style(".nav-pills .nav-link.active {color: #fff; background-color: #3c8dbc;}")),
+    tags$head(tags$style(".nav-pills .nav-link:not(.active):hover {color: #3c8dbc !important;}")),
+
     tabItems(
       tabItem(
         tabName = "home",  # Content for the "home" tab ----
         h3(strong("Welcome to the reusable data explorer App.")),  # Subheading
 
-        p("This shiny web application was developed as a part of the Reusable
-        research data made shiny workshop that was held at the University of Guelph,
-        Guelph Ontario Canada.","You can find more information about the workshop
-        and access the workshop materials",
-          tags$a(href = "https://github.com/agrifooddatacanada/RRDMS_Workshop",
-                 "here.", target = "_blank")),  # Create a hyperlink
+        br(),
 
-        h4(strong("About the App")),
+        p(" The reusable data explorer App allows researchers to assess and explore historical data.",
+          "This tool facilitates a preliminary review of past research data,",
+          " and can also enable the integration of historical datasets into larger, contemporary projects.",
+          "It provides detailed study information and exploratory data analysis functions.","
+        such applications enhance the efficiency and depth of research in historical studies."),
 
         p("The ",
           strong("Explore borealis tab"),
@@ -78,12 +84,40 @@ ui <- dashboardPage(
 
         br(),
 
+        p(h4(strong("Have fun exploring re-usable data!")))
+      ),
+
+      tabItem(
+        tabName = "About_tab",
+
+        p(strong(h4("Why the app ?"))),
+
+        p("This app was developed as part of an initiative to increase the value
+          of research data by aligning with the FAIR data principles, ensuring
+          that data is Findable, Accessible, Interoperable, and Reusable.",
+          "By simplifying the application of these principles, the app enhances
+          the usability and value of research data, benefiting everyone in the Agri-Food sector.",
+          "Learn more about the Agric-Food data centre at the University of Guelph",
+          tags$a(href = "https://agrifooddatacanada.ca/",
+                 "here.", target = "_blank")),  # Create a hyperlink
+
+
+        p("This shiny web application was developed as a part of the Reusable
+        research data made shiny workshop that was held at the University of Guelph,
+        Guelph Ontario Canada.","You can find more information about the workshop
+        and access the workshop materials on Github",
+          tags$a(href = "https://github.com/agrifooddatacanada/RRDMS_Workshop",
+                 "here.", target = "_blank")),  # Create a hyperlink
+
         img(src = 'workshop1.jpeg', height = 400, width = 700),
 
         br(),
 
-        p(h4(strong("Have fun exploring re-usable data!"))
-        )
+        p(strong(h4("Funding"))),
+
+        br(),
+
+        p(strong(h4("Licensing")))
       ),
 
       tabItem(
@@ -94,10 +128,15 @@ ui <- dashboardPage(
                collapsible = TRUE,
                maximizable = TRUE,
                elevation = 1,
-               solidHeader = TRUE,
+               solidHeader = FALSE,
                status = "lightblue",
-               side = "right",
-               type = "tabs",
+               # sidebar = boxSidebar(id = "infoPanel",
+               #                      uiOutput("nodeInfo"),
+               #                      width = 25,
+               #                      startOpen = TRUE
+               # ),
+               #side = "right",
+               #type = "tabs",
                tabPanel("Study network", # UI Panel for the study network ----
                         fluidRow(
                           column(12,
@@ -111,7 +150,7 @@ ui <- dashboardPage(
                                  withSpinner(visNetworkOutput("networkPlot",
                                                               width="100%",
                                                               height = "800px")
-                                             ),
+                                 ),
                                  absolutePanel(id = "infoPanel",
                                                fixed = TRUE,
                                                draggable = TRUE,
@@ -148,10 +187,10 @@ ui <- dashboardPage(
                   collapsible = TRUE,
                   maximizable = TRUE,
                   elevation = 1,
-                  solidHeader = TRUE,
+                  solidHeader = FALSE,
                   status = "lightblue",
-                  side = "right",
-                  type = "tabs",
+                  #side = "right",
+                  #type = "tabs",
                   tabPanel("Study Overview", # Panel for the study overview ----
                            fluidRow(
                              column(12,
@@ -871,7 +910,7 @@ server <- function(input, output, session) {
 
     if (analysis_type == "Heat map") {
       plotlyOutput("heatmap_plot",
-                   height = "auto")
+                   height = "600px")
     } else {
       plotOutput("other_plots",
                  height = "600px")
