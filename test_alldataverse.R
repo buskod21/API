@@ -150,7 +150,7 @@ ui <- dashboardPage(
                                    selected = OAC_info$id[1]
                                  ),
 
-                                 br(),
+                                 br(), # Inserts a line break
 
                                  awesomeRadio(
                                    inputId = "event_type",
@@ -158,7 +158,10 @@ ui <- dashboardPage(
                                    choices = c("Keywords", "Authors"),
                                    selected = "Keywords",
                                    inline = TRUE
-                                 ), hr(),
+                                 ),
+
+                                 hr(), # Inserts horizontal line
+
                                  withSpinner(visNetworkOutput("networkPlot",
                                                               width="100%",
                                                               height = "800px")
@@ -221,7 +224,7 @@ ui <- dashboardPage(
                                                 choices = NULL),
 
 
-                                    br(),
+                                    br(), # Inserts a line break
 
                                     # UI for the metadata
                                     tags$b("Data description"),
@@ -378,7 +381,8 @@ server <- function(input, output, session) {
 
     return (detailed_data)
 
-  }) #%>% bindCache(OAC_info, input$select_dataverse)  # Cache based on dataverse selection
+  }) %>% bindCache(OAC_info, input$select_dataverse)  # Cache based on dataverse selection
+
 
   # View all studies in the selected dataverse, if not filtered by the network
   observe({
@@ -390,7 +394,7 @@ server <- function(input, output, session) {
     }
   })
 
-  # Reactive explression for processing keywords
+  # Reactive expression for processing keywords
   keywords <- reactive({
 
     req(detailed_data())
@@ -430,7 +434,7 @@ server <- function(input, output, session) {
     }
   })
 
-  # Reactive expression to prepare network data i.e., nodes and edges
+  # Reactive expression to prepare network data (i.e., nodes and edges)
   network_data_reactive <- reactive({
     req(detailed_data(),
         input$event_type)
@@ -449,7 +453,9 @@ server <- function(input, output, session) {
     # Node processing
     nodes <- map_df(events, function(event) {
       matched_papers <- data %>%
-        filter(str_detect(.data[[event_column]], regex(paste0("\\b", event, "\\b"), ignore_case = TRUE)))
+        filter(str_detect(.data[[event_column]],
+                          regex(paste0("\\b", event, "\\b"),
+                                ignore_case = TRUE)))
 
       studies_count <- nrow(matched_papers)
       year_range <- if (studies_count > 0) {
@@ -485,11 +491,11 @@ server <- function(input, output, session) {
 
     list(nodes = nodes, edges = edges)
 
-  }) #%>% bindCache(input$event_type)  # Cache based on dataverse selection and event type
+  }) %>% bindCache(input$event_type, detailed_data())  # Cache based on detailed_data() and event type
 
   # Render the network plot
   output$networkPlot <- renderVisNetwork({
-    req(network_data_reactive(), detailed_data()) # Ensures required data is available
+    req(network_data_reactive()) # Ensures required data is available
 
     network_data <- network_data_reactive()
 
@@ -507,13 +513,9 @@ server <- function(input, output, session) {
                                        main = "Select by ID",
                                        style = 'width: 300px; height: 26px;'))%>%
       visLayout(randomSeed = 123) %>%  # Consistent layout
-      visPhysics(solver = "barnesHut",
-                 forceAtlas2Based = list(gravitationalConstant = -8000,
-                                         centralGravity = 0.3,
-                                         springLength = 200,
-                                         springConstant = 0.04,
-                                         damping = 0.9,
-                                         avoidOverlap = 0.1)) %>%
+      visPhysics(solver = "forceAtlas2Based",
+                 timestep = 0.3,
+                 minVelocity = 50) %>%
       visInteraction(hover = FALSE,
                      navigationButtons = TRUE,
                      keyboard = TRUE,
@@ -527,7 +529,7 @@ server <- function(input, output, session) {
 
   # When an event is selected in the network, update the study select input
   observeEvent(input$selectedEvent, {
-    req(input$event_type,input$select_dataverse, detailed_data())
+    req(input$event_type, input$select_dataverse, detailed_data())
 
     data <- detailed_data()
 
@@ -628,11 +630,12 @@ server <- function(input, output, session) {
 
     # Render the datatable
     datatable(filtered_data,
-              options = list(dom = 'tp',
-                             autoWidth = TRUE,
-                             scrollX = TRUE),
               rownames = TRUE,
-              colnames = c("Parameter", "Value"))
+              colnames = c("Parameter", "Value"),
+              options = list(dom = 'tp',
+                             autoWidth = FALSE,
+                             scrollX = TRUE)
+              )
   })
 
 

@@ -150,58 +150,6 @@ fetch_study_details <- function(data){
 }
 
 
-# library(dplyr)
-# library(httr2)
-# access_data <- function(doi) {
-#
-#   #api_token <- Sys.getenv("API_TOKEN")  # Retrieve the API token from environment variables
-#
-#   # Construct the full URL
-#   full_url_dataAccess <- paste0("https://borealisdata.ca/api/access/dataset/",
-#                                 ":persistentId/?persistentId=",
-#                                 doi)
-#
-#   # Attempt to make the API request and handle errors gracefully
-#   tryCatch({
-#     response <- request(full_url_dataAccess) %>%
-#       req_headers(`X-Dataverse-key` = Api_token) %>%
-#       req_perform()
-#
-#     # Check the status of the response
-#     if (resp_status(response) == 200) {
-#       # Get the content of the response as a raw vector
-#       zip_content <- resp_body_raw(response)
-#
-#       # Use tempfile to create a temporary file for the zip content
-#       temp_zip <- tempfile(fileext = ".zip")
-#
-#       # Write the raw vector to the temporary file
-#       writeBin(zip_content, temp_zip)
-#
-#       # Use a temporary directory to extract the files
-#       temp_unzip_dir <- tempdir()
-#
-#       # Extract the files to the temporary directory
-#       unzip(temp_zip, exdir = temp_unzip_dir)
-#
-#       # List files in the temporary directory
-#       file_list <- list.files(temp_unzip_dir, full.names = TRUE)
-#
-#       # Clean up the temporary zip file
-#       unlink(temp_zip)
-#
-#       return(file_list)
-#
-#     } else {
-#       return(NULL)
-#     }
-#   }, error = function(e) {
-#     # Silently handle errors by returning NULL
-#     return(NULL)
-#   })
-#
-# }
-
 access_data <- function(doi) {
   Base_url <- "https://borealisdata.ca/api/"
   endpoint3 <- "access/dataset/"
@@ -246,7 +194,6 @@ access_data <- function(doi) {
   })
 }
 
-access_data("doi:10.5683/SP3/4RA3KT")
 
 # Function to filter for .txt file and .tab/.csv file in the filelist and extract just the basename
 filter_filelist <- function(file_list, is_txt) {
