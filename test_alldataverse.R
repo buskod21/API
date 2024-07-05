@@ -142,12 +142,12 @@ ui <- dashboardPage(
                tabPanel("Study network", # UI Panel for the study network ----
                         fluidRow(
                           column(12,
-                                 selectInput(
-                                   inputId = "select_dataverse" ,
-                                   label = " Select dataverse to view",
+                                 pickerInput(
+                                   inputId = "select_dataverse",
+                                   label = "Select dataverse to view",
                                    choices = setNames(OAC_info$id, OAC_info$title),
-                                   multiple = TRUE,
-                                   selected = OAC_info$id[1]
+                                   # options = list(`actions-box` = TRUE),
+                                   multiple = TRUE
                                  ),
 
                                  br(), # Inserts a line break
@@ -260,7 +260,13 @@ ui <- dashboardPage(
                                                  elevation = 1,
                                                  width = 12,
                                                  collapsed = F,
+                                                 # switchInput(
+                                                 #   inputId = "change_view",
+                                                 #   onLabel = "View data as text",
+                                                 #   offLabel = "View data as datatable"
+                                                 # ),
                                                  DT::dataTableOutput("rawtable")
+                                                 # verbatimTextOutput("rawtext")
                                                ),
 
                                                fluidRow(
@@ -654,16 +660,12 @@ server <- function(input, output, session) {
       pull(DOI) %>%
       unique()
 
-    print(selected_doi)
-
     # Ensure that selected_doi is a single value
     if (length(selected_doi) != 1) {
       stop("Multiple or no DOIs found for the selected title")
     }
 
     file_list <- access_data(selected_doi)
-
-    print(file_list)
 
     # Handle cases where no files are returned
     if (is.null(file_list) || length(file_list) == 0) {

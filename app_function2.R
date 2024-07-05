@@ -149,26 +149,16 @@ fetch_study_details <- function(data){
   return(detailed_data)
 }
 
-
 access_data <- function(doi) {
-  Base_url <- "https://borealisdata.ca/api/"
-  endpoint3 <- "access/dataset/"
-  Api_token <- "9d1d1699-56f5-4efe-801e-cf841de6f344"
-
-  # Sanitize the DOI to create a valid directory name
-  sanitized_doi <- gsub("[^A-Za-z0-9]", "_", doi)
-  unique_dir <- paste0("data_", sanitized_doi)
-
-  # Check and create a unique directory
-  if (!dir.exists(unique_dir)) {
-    dir.create(unique_dir, recursive = TRUE)
-  }
+  Acess_data_url <- "https://borealisdata.ca/api/access/dataset/"
 
   # Construct the full URL
-  full_url3 <- paste0(Base_url, endpoint3, ":persistentId/?persistentId=", doi)
+  full_url3 <- paste0(Acess_data_url, ":persistentId/?persistentId=", doi)
 
-  # Path to save the downloaded ZIP file
-  zip_path <- file.path(unique_dir, "downloaded_data.zip")
+  # Create a unique temporary directory for this operation
+  unique_temp_dir <- tempfile("data_download")
+  dir.create(unique_temp_dir)
+  on.exit(unlink(unique_temp_dir, recursive = TRUE), add = TRUE)  # Ensure this directory is deleted after use
 
   # Make the API request and download the ZIP file
   tryCatch({
@@ -176,24 +166,32 @@ access_data <- function(doi) {
       req_headers(`X-Dataverse-key`= Api_token) %>%
       req_perform()
 
-    if (response$status == 200) {
+    if (response$status_code == 200) {
+
+
+      # Path to save the downloaded ZIP file
+      zip_path <- file.path(unique_temp_dir, "downloaded_data.zip")
       writeBin(response$body, zip_path)
-      unzip_dir <- file.path(unique_dir, "unzipped_data")
-      if (!dir.exists(unzip_dir)) {
-        dir.create(unzip_dir, recursive = TRUE)
-      }
+
+      # Directory to extract files
+      unzip_dir <- file.path(unique_temp_dir, "unzipped_data")
+      dir.create(unzip_dir)
+
+      # Unzip in the new unique directory
       unzip(zip_path, exdir = unzip_dir)
+
+      # Process files directly
       file_list <- list.files(unzip_dir, full.names = TRUE)
-      return(file_list)
-    } else {
+      return(file_list)  # Return contents of the files or other processing result
+
+      } else {
       return(NULL)
     }
   }, error = function(e) {
-    # Silently handle errors by returning NULL
-    return(NULL)
+        print("Restricted data not accessible.")
+        return(NULL)
   })
 }
-
 
 # Function to filter for .txt file and .tab/.csv file in the filelist and extract just the basename
 filter_filelist <- function(file_list, is_txt) {
