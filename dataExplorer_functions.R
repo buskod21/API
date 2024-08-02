@@ -33,7 +33,6 @@ fetch_oac_info <- function() {
 }
 
 
-
 # Function to fetch content of each dataverse in OAC repo based on their IDs
 ## IDs are gotten from the fetch_oac_info()
 
@@ -149,16 +148,13 @@ fetch_study_details <- function(data){
   return(detailed_data)
 }
 
+
 access_data <- function(doi) {
   Acess_data_url <- "https://borealisdata.ca/api/access/dataset/"
 
-  # Construct the full URL
+  # Full URL construction and file path setup
   full_url3 <- paste0(Acess_data_url, ":persistentId/?persistentId=", doi)
-
-  # Create a unique temporary directory for this operation
-  unique_temp_dir <- tempfile("data_download")
-  dir.create(unique_temp_dir)
-  on.exit(unlink(unique_temp_dir, recursive = TRUE), add = TRUE)  # Ensure this directory is deleted after use
+  # zip_path <- file.path(unique_dir, "downloaded_data.zip")
 
   # Make the API request and download the ZIP file
   tryCatch({
@@ -168,30 +164,39 @@ access_data <- function(doi) {
 
     if (response$status_code == 200) {
 
+      # Get the content of the response as a raw vector
+      zip_content <- resp_body_raw(response)
 
-      # Path to save the downloaded ZIP file
-      zip_path <- file.path(unique_temp_dir, "downloaded_data.zip")
-      writeBin(response$body, zip_path)
+      # Use tempfile to create a temporary file for the zip content
+      temp_zip <- tempfile(fileext = ".zip")
 
-      # Directory to extract files
-      unzip_dir <- file.path(unique_temp_dir, "unzipped_data")
-      dir.create(unzip_dir)
+      # Write the raw vector to the temporary file
+      writeBin(zip_content, temp_zip)
 
-      # Unzip in the new unique directory
-      unzip(zip_path, exdir = unzip_dir)
+      # Use a temporary directory to extract the files
+      temp_unzip_dir <- tempfile()
 
-      # Process files directly
-      file_list <- list.files(unzip_dir, full.names = TRUE)
-      return(file_list)  # Return contents of the files or other processing result
+      # Extract the files to the temporary directory
+      unzip(temp_zip, exdir = temp_unzip_dir)
 
-      } else {
+      # List files in the temporary directory
+      file_list <- list.files(temp_unzip_dir, full.names = TRUE)
+
+      # Clean up the temporary zip file
+      unlink(temp_zip)
+
+      # Process the files as needed (this example simply returns the list of files)
+      return(file_list)
+    }
+    else {
       return(NULL)
     }
+
   }, error = function(e) {
-        print("Restricted data not accessible.")
-        return(NULL)
+    print("Restricted data not accessible.")
   })
 }
+
 
 # Function to filter for .txt file and .tab/.csv file in the filelist and extract just the basename
 filter_filelist <- function(file_list, is_txt) {
